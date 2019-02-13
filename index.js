@@ -50,7 +50,7 @@ ReplaceHashPlugin.prototype.apply = function (compiler) {
 
       Object.keys(stats.compilation.assets).filter(function(item) {
         return self.options.exts.some(function(e) {
-          return endsWith(item, e);
+          return endsWith(item, "." + e);
         });
       }).forEach(function(item) {
         var ext = path.extname(item); //.js
