@@ -12,6 +12,7 @@ var url = require('url');
 var mkdirp = require('mkdirp');
 var endsWith = require('lodash.endswith');
 var packingGlob = require('packing-glob');
+var MiniCssExtractPlugin = moduleAvailable('mini-css-extract-plugin') ? require("mini-css-extract-plugin") : false;
 
 var defaultPatternList = [
   {
@@ -32,14 +33,17 @@ ReplaceHashPlugin.prototype.apply = function (compiler) {
   self.options.cwd = self.options.cwd ? (path.isAbsolute(self.options.cwd) ? self.options.cwd : path.resolve(compiler.options.context, self.options.cwd)) : compiler.options.context;
   self.options.dest = path.isAbsolute(self.options.dest) ? self.options.dest : path.resolve(process.cwd(), self.options.dest);
 
-  compiler.plugin('done', function (stats) {
-    var publicPath = compiler.options.output.publicPath;
+  compiler.hooks.done.tap('BuildStatsPlugin', (stats) => {
+    var publicPath = (typeof compiler.options.output.publicPath !== "undefined") ? compiler.options.output.publicPath : "";
     var jsChunkFileName = compiler.options.output.filename;
     var cssChunkFileName;
     // 找出ExtractTextPlugin插件在plugins中的位置
     compiler.options.plugins.forEach(function(pluginConfig) {
       if (pluginConfig.filename) {
         cssChunkFileName = pluginConfig.filename;
+        // or check if plugin is instance of MiniCssExtractPlugin
+      } else if (MiniCssExtractPlugin && pluginConfig instanceof MiniCssExtractPlugin) {
+        cssChunkFileName = pluginConfig.options.filename;
       }
     });
 
@@ -59,32 +63,32 @@ ReplaceHashPlugin.prototype.apply = function (compiler) {
 
         switch (ext) {
           case '.js':
-            filename = jsChunkFileName;
-            break;
+          filename = jsChunkFileName;
+          break;
           case '.css':
-            filename = cssChunkFileName;
-            break;
+          filename = cssChunkFileName;
+          break;
           default:
-            compiler.options.module.rules.forEach(function(rule) {
-              if (rule.test.test(ext) || rule.test.toString().indexOf(ext) > -1) {
-                var query = rule.query || rule.options;
-                if (rule.use) {
-                  rule.use.forEach(function(use) {
-                    if (use.loader === 'url' ||
-                      use.loader === 'url-loader' ||
-                      use.loader === 'file' ||
-                      use.loader === 'file-loader') {
-                      query = use.query || use.options;
-                    }
-                  })
-                }
-                if (query) {
-                  filename = query.name;
-                } else {
-                  filename = '[hash].[ext]';
-                }
+          compiler.options.module.rules.forEach(function(rule) {
+            if (rule.test.test(ext) || rule.test.toString().indexOf(ext) > -1) {
+              var query = rule.query || rule.options;
+              if (rule.use) {
+                rule.use.forEach(function(use) {
+                  if (use.loader === 'url' ||
+                  use.loader === 'url-loader' ||
+                  use.loader === 'file' ||
+                  use.loader === 'file-loader') {
+                    query = use.query || use.options;
+                  }
+                })
               }
-            })
+              if (query) {
+                filename = query.name;
+              } else {
+                filename = '[hash].[ext]';
+              }
+            }
+          })
         }
         var hashLengthMatches = filename.match(/\[\S*hash:(\d+)\]/i);
         var hashLength;
@@ -93,17 +97,17 @@ ReplaceHashPlugin.prototype.apply = function (compiler) {
             hashLength = hashLengthMatches[1];
           }
           var regString = filename
-            .replace('\[path\]', '')
-            .replace('\[name\]', '(\\S+)')
-            .replace('\[ext\]', ext.substr(1, ext.length))
-            .replace('\[chunkhash:' + hashLength + '\]', '\\w{' + hashLength + '}')
-            .replace('\[contenthash:' + hashLength + '\]', '\\w{' + hashLength + '}')
-            .replace('\[hash:' + hashLength + '\]', '\\w{' + hashLength + '}');
+          .replace('\[path\]', '')
+          .replace('\[name\]', '(\\S+)')
+          .replace('\[ext\]', ext.substr(1, ext.length))
+          .replace('\[chunkhash:' + hashLength + '\]', '\\w{' + hashLength + '}')
+          .replace('\[contenthash:' + hashLength + '\]', '\\w{' + hashLength + '}')
+          .replace('\[hash:' + hashLength + '\]', '\\w{' + hashLength + '}');
           var matches = item.match(new RegExp(regString));
           if (matches) {
             var oldFilename = matches[1] + ext;
             var oldPath = oldFilename;
-            var newPath = publicPath + item;
+            var newPath = publicPath + item.split("/").pop();
             data = self.doReplace(oldPath, newPath, data);
           } else {
             console.log('[warnings]%s replace hash failed.', item);
@@ -138,6 +142,14 @@ ReplaceHashPlugin.prototype.apply = function (compiler) {
   });
 
 };
+
+function moduleAvailable(name) {
+  try {
+    require.resolve(name);
+  } catch(e) {
+    return false;
+  }
+}
 
 ReplaceHashPlugin.prototype.doReplace = function (oldPath, newPath, data) {
   (this.options.pattern || defaultPatternList).forEach(function(pattern) {
