@@ -12,7 +12,12 @@ var url = require('url');
 var mkdirp = require('mkdirp');
 var endsWith = require('lodash.endswith');
 var packingGlob = require('packing-glob');
-var MiniCssExtractPlugin = moduleAvailable('mini-css-extract-plugin') ? require("mini-css-extract-plugin") : false;
+
+try {
+  var MiniCssExtractPlugin = require("mini-css-extract-plugin");
+} catch(e) {
+  var MiniCssExtractPlugin = false;
+}
 
 var defaultPatternList = [
   {
@@ -142,14 +147,6 @@ ReplaceHashPlugin.prototype.apply = function (compiler) {
   });
 
 };
-
-function moduleAvailable(name) {
-  try {
-    require.resolve(name);
-  } catch(e) {
-    return false;
-  }
-}
 
 ReplaceHashPlugin.prototype.doReplace = function (oldPath, newPath, data) {
   (this.options.pattern || defaultPatternList).forEach(function(pattern) {
